@@ -229,69 +229,74 @@ class ImageFolder(DatasetFolder):
 
 # Data augmentation and normalization for training
 # Just normalization for validation
+def handle(req):
 
-data_transforms = {
-    'train': transforms.Compose([
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop((373, 500)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    print("Before req.files")
+    f = req.files['media']
+    print("file acquired")
 
-    ]),
-    'val': transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]),
-}
+    data_transforms = {
+        'train': transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop((373, 500)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-model_ft = models.resnet50(pretrained=True)
-optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.76)
-# for param in model_ft.parameters():
-#     param.requires_grad = False
-    
-num_ftrs = model_ft.fc.in_features
-model_ft.fc = nn.Linear(num_ftrs, 2)
-model_ft.avgpool = nn.AdaptiveAvgPool2d(1)
+        ]),
+        'val': transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ]),
+    }
 
-if torch.cuda.device_count() > 1:
-    #print("Let's use", torch.cuda.device_count(), "GPUs!")
-    # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-    model_ft = nn.DataParallel(model_ft)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model_ft = models.resnet50(pretrained=True)
+    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.76)
+    # for param in model_ft.parameters():
+    #     param.requires_grad = False
 
-model_ft = model_ft.to(device)
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs, 2)
+    model_ft.avgpool = nn.AdaptiveAvgPool2d(1)
 
-PATH = 'models/emo_recog1.pt'
-checkpoint = torch.load(PATH, map_location='cpu')
-new_state_dict = OrderedDict()
-for k, v in checkpoint['model_state_dict'].items():
-   name = k[7:] # remove `module.`
-   new_state_dict[name] = v
-model_ft.load_state_dict(new_state_dict)
-# optimizer_ft.load_state_dict(checkpoint['optimizer_state_dict'])
-criterion = checkpoint['loss']
+    if torch.cuda.device_count() > 1:
+        #print("Let's use", torch.cuda.device_count(), "GPUs!")
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        model_ft = nn.DataParallel(model_ft)
 
-data_dir = 'audio_data/'
-image_datasets = ImageFolder(data_dir, data_transforms['val'])
-dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=1, shuffle=True, num_workers=1)
+    model_ft = model_ft.to(device)
 
-model_ft.eval()
-inputs, labels, path = next(iter(dataloaders))
+    PATH = 'models/emo_recog1.pt'
+    checkpoint = torch.load(PATH, map_location='cpu')
+    new_state_dict = OrderedDict()
+    for k, v in checkpoint['model_state_dict'].items():
+       name = k[7:] # remove `module.`
+       new_state_dict[name] = v
+    model_ft.load_state_dict(new_state_dict)
+    # optimizer_ft.load_state_dict(checkpoint['optimizer_state_dict'])
+    criterion = checkpoint['loss']
 
-inputs = inputs.to(device)
-labels = labels.to(device)
+    data_dir = 'audio_data/'
+    image_datasets = ImageFolder(data_dir, data_transforms['val'])
+    dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=1, shuffle=True, num_workers=1)
 
-# zero the parameter gradients
-optimizer_ft.zero_grad()
+    model_ft.eval()
+    inputs, labels, path = next(iter(dataloaders))
 
-# forward
-# track history if only in train
-with torch.set_grad_enabled(False):
-    outputs = model_ft(inputs)
-    _, preds = torch.max(outputs, 1)
-    loss = criterion(outputs, labels)
+    inputs = inputs.to(device)
+    labels = labels.to(device)
 
-if preds.data.cpu().numpy()[0] == 0:
-    print("Angry")
-else:
-    print("Happy")
+    # zero the parameter gradients
+    optimizer_ft.zero_grad()
+
+    # forward
+    # track history if only in train
+    with torch.set_grad_enabled(False):
+        outputs = model_ft(inputs)
+        _, preds = torch.max(outputs, 1)
+        loss = criterion(outputs, labels)
+
+    if preds.data.cpu().numpy()[0] == 0:
+        return("Angry")
+    else:
+        return("Happy")
